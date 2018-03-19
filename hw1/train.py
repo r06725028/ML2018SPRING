@@ -3,9 +3,9 @@ import pandas as pd
 import csv
 import sys
 import math
-import random
-from tqdm import tqdm
-import pickle as pkl#改用np.save為npy檔
+#import random
+#from tqdm import tqdm
+#import pickle as pkl#改用np.save為npy檔
 #from sklearn import linear_model
 
 np.random.seed(123)
@@ -43,7 +43,7 @@ def pre_traindata(path):
 
 	feature_no = 0
 	one_x = {}
-	for idx,row in tqdm(enumerate(train_df.iterrows()),total=len(train_df),desc='pm2.5 one day...'):
+	for idx,row in enumerate(train_df.iterrows()):
 		feature_no+=1
 		ob_list = list(row[1])
 		assert len(ob_list)==24,'len ob_list error!!!'#一天24小時
@@ -67,47 +67,57 @@ def pre_traindata(path):
 	print('x shape = ',x_ma.shape)
 	print('y shape = ',y_ma.shape)
 	##6.存成pkl
+	"""
 	with open('all_x.pkl','wb') as f:
 		pkl.dump(x_ma,f)
 	with open('all_y.pkl','wb') as f:
 		pkl.dump(y_ma,f)
-
+	"""
 	return x_ma,y_ma
 
 def pre_testdata(path):
+	test = []
+	test_x = []
 	test_df = pd.read_csv(path, header=None, encoding='big5')	
-	assert len(test_df)==18*260,'read_csv error!!!'#18個觀測值＊每月20天＊一年12個月
+	#assert len(test_df)==18*260,'read_csv error!!!'#18個觀測值＊每月20天＊一年12個月
 	##2.只取出pm2.5那欄
 	#print(train_df[train_df.columns[2]=='PM2.5'])#KeyError: False
 	#test_df = test_df[test_df[test_df.columns[1]]=='PM2.5']
 	#train_df = train_df[train_df[train_df.columns[1]=='PM2.5']]
 	#assert len(test_df)==260,'only pm2.5 error!!!'
 	##2.移除前三欄
-	print(len(test_df.columns))
+	#print(len(test_df.columns))
 	#DF.drop([DF.columns[[0,1, 3]]], axis=1,inplace=True) 
 	test_df = test_df.drop(list(test_df.columns)[0:2],axis=1)
-	print(len(test_df.columns))
-	assert len(test_df.columns)==9,'columns num error!!!'#一天24小時
+	#print(len(test_df.columns))
+	#assert len(test_df.columns)==9,'columns num error!!!'#一天24小時
 	##3.處理遺失值
 	#train_df = train_df.fillna({"":0.0})
 	test_df = test_df.replace(to_replace='NR', value=0.0)
 	##4.分出x
-	test_x = []
-
-	for row in tqdm(test_df.iterrows(),total=len(test_df),desc='pm2.5 nine hours...'):
+	for row in test_df.iterrows():
 		pm25_list = list(row[1])
 		assert len(pm25_list)==9,'len pm25_list error!!!'#一天24小時
-		test_x.append(np.array(pm25_list))#.astype(np.float)
-		
+		test_x.append(np.array(pm25_list))#.astype(np.float)	
 	##5.轉成矩陣
 	test_x_ma = np.array(test_x).astype(np.float)
-	print('test_x shape = ',test_x_ma.shape)
-
+	#print('test_x shape = ',test_x_ma.shape)
+	with open(path, 'rb') as f:
+		test_data = f.read()
+		test_data = test_data.splitlines()
+		i = 0
+		for line in test_data:
+			line = [x.replace("\'", "") for x in str(line).split(',')[2:]]
+			if i % 18 == 10:
+				line = [x.replace("NR", "0") for x in line]
+			line = [float(x) for x in line]
+			test.append(line)
+			i += 1
 	##6.存成npy
 	with open('test_x.npy','wb') as f:
 		np.save(f,test_x_ma)
 
-	return test_x_ma
+	return test
 
 def ten_fold(x_ma,y_ma):
 	assert x_ma.shape[0] == y_ma.shape[0] , 'train x,y row not consist'
@@ -137,21 +147,28 @@ def ten_fold(x_ma,y_ma):
 
 	return x_ma_list,y_ma_list,x_va_list,y_va_list
 
+def predict(x, weight, bias):
+	return np.sum(x * w) + b
+
 def scale(x_ma):
 	min_x = np.min(x_ma, axis=0)
 	max_x = np.max(x_ma, axis=0)
-
 	return (x_ma-min_x)/float(max_x-min_x)
 
-def predict(x_ma,weight,bias):
+def predict_(x_ma,weight,bias):
 	return x_ma*weight+bias
 
-def error(predict,y_ma):
+def error_(predict,y_ma):
 	return predict-y_ma
 
-def loss(error):
+def loss_(error):
 	return np.sqrt(np.mean(error ** 2))	
 
+def select(test, start, time, features):
+	op_list = []
+	for f in features:
+		op_list += [test[f][start : start + time]]
+	return op_list
 
 def train(x_ma,y_ma,x_va,y_va,weight,bias,lr,weight_lr,bias_lr,epoch):
 	x_ma = scale(x_ma)
@@ -192,42 +209,59 @@ def train(x_ma,y_ma,x_va,y_va,weight,bias,lr,weight_lr,bias_lr,epoch):
 
 	return weight,bias,weight_lr,bias_lr
 
-x_ma,y_ma = pre_traindata('train.csv')
-x_ma_list,y_ma_list,x_va_list,y_va_list = ten_fold(x_ma,y_ma)
+def main():	
+	x_ma,y_ma = pre_traindata('train.csv')
+	x_ma_list,y_ma_list,x_va_list,y_va_list = ten_fold(x_ma,y_ma)
 
-feature_num = x_ma.shape[1]*9
+	feature_num = x_ma.shape[1]*9
 
-bias = 0.0
-weight = np.ones((162, 1))
+	bias = 0.0
+	weight = np.ones((162, 1))
 
-bias_lr = 0.0
-weight_lr = np.zeros((162, 1))
+	bias_lr = 0.0
+	weight_lr = np.zeros((162, 1))
 
 
-for i in tqdm(range(10)):
-	x_ma = x_ma_list[i]
-	y_ma = y_ma_list[i]
-	x_va = x_va_list[i]
-	y_va = y_va_list[i]
+	for i in range(10):
+		x_ma = x_ma_list[i]
+		y_ma = y_ma_list[i]
+		x_va = x_va_list[i]
+		y_va = y_va_list[i]
 
-	weight,bias,weight_lr,bias_lr = train(x_ma,y_ma,x_va,y_va,weight,bias,lr,weight_lr,bias_lr,epoch)
-	
-with open('allf_b.npy','wb') as f:
-	np.save(f,bias)
-with open('allf_w.npy','wb') as f:
-	np.save(f,weight)
+		weight,bias,weight_lr,bias_lr = train(x_ma,y_ma,x_va,y_va,weight,bias,lr,weight_lr,bias_lr,epoch)
+		
+	with open('allf_b.npy','wb') as f:
+		np.save(f,bias)
+	with open('allf_w.npy','wb') as f:
+		np.save(f,weight)
 
-"""
-bias = np.load('pm25_t1_b.npy')
-weight = np.load('pm25_t1_w.npy')
-"""
-test_x_ma = np.load('test_x.npy')
-#test_x_ma = (test_x_ma - min_x) / (max_x - min_x)
-#test_x_ma = np.reshape(test_x_ma, (-1, feature_num))
-pred_y = np.dot(test_x_ma,weight)+bias
-#predict = model.predict_test(X_test)
-with open('output_me.csv', 'w') as f:
-	print('id,value', file=f)
-	for (i, p) in enumerate(pred_y) :
-		print('id_{},{}'.format(i, p[0]), file=f)
+	"""
+	bias = np.load('pm25_t1_b.npy')
+	weight = np.load('pm25_t1_w.npy')
+	"""
+	test_x_ma = np.load('test_x.npy')
+	#test_x_ma = (test_x_ma - min_x) / (max_x - min_x)
+	#test_x_ma = np.reshape(test_x_ma, (-1, feature_num))
+	pred_y = np.dot(test_x_ma,weight)+bias
+	#predict = model.predict_test(X_test)
+	with open('output_me.csv', 'w') as f:
+		print('id,value', file=f)
+		for (i, p) in enumerate(pred_y) :
+			print('id_{},{}'.format(i, p[0]), file=f)
+
+w = np.load('my_w.npy')
+b = np.load('my_b.npy')
+
+inputfile = sys.argv[1]
+outfile = sys.argv[2]
+
+test = pre_testdata(inputfile)
+print(len(test)/18)
+with open(outfile, "w") as f:
+	f.write("id,value\n")
+	for d in range(260):
+		test_data = np.array(select(test[d*18:(d+1)*18],9-7,7,[7,9,12]))
+		predict_op = predict(test_data, w, b)
+		f.write("id_"+str(d)+","+str(predict_op)+"\n")
+
 
