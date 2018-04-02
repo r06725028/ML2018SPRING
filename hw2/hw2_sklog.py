@@ -156,7 +156,7 @@ print ('accuracy train:%.3f'%(accuracy_score(train_y,y_pred)))
 with open (sys.argv[6]+'_model.pkl','wb') as f:
 	pkl.dump(classifer,f)
 """
-classifer = pkl.load(open('log_model.pkl','rb'))
+classifer = pkl.load(open('best_model.pkl','rb'))
 result = classifer.predict(new_test)
 with open(sys.argv[6], "w") as f:
 	f.write("id,label\n")
