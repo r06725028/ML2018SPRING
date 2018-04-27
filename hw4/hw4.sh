@@ -1,0 +1,1 @@
+python3.6 img_clu.py $1 $2 $3
