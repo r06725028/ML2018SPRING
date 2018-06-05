@@ -1,0 +1,1 @@
+python hw5_train.py $1 $2 model100 train 

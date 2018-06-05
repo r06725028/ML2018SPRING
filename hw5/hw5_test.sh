@@ -1,0 +1,1 @@
+python python3 hw5_test.py $1 $2  $3 token_new.pkl mymodel.h5
